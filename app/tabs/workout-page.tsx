@@ -1,3 +1,5 @@
+import * as Haptics from "expo-haptics";
+import { useKeepAwake } from "expo-keep-awake";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import React, {
   useCallback,
@@ -12,59 +14,84 @@ import {
   FlatList,
   ListRenderItemInfo,
   StyleSheet,
+  Switch,
   Text,
+  TextInput,
   View,
 } from "react-native";
-import SessionHeader from "../components/sessionHeader";
-import { WORKOUTS, type Step, type Workout } from "../data/workouts";
+import SessionHeader from "../../components/sessionHeader";
+import { WORKOUTS, type Step, type Workout } from "../../data/workouts";
 
 export default function WorkoutPage() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id?: string }>();
 
+  // Pick a workout by id or fallback
   const workout: Workout = useMemo(
     () => WORKOUTS.find((w) => w.id === id) ?? WORKOUTS[0],
     [id]
   );
 
-  const circuit: Step[] = workout?.steps ?? [];
+  // Local editable steps (so inputs can modify durations)
+  const [steps, setSteps] = useState<Step[]>(workout?.steps ?? []);
 
   const [stepIndex, setStepIndex] = useState(0);
-  const [secondsLeft, setSecondsLeft] = useState(circuit[0]?.duration ?? 0);
+  const [secondsLeft, setSecondsLeft] = useState(steps[0]?.duration ?? 0);
   const [isActive, setIsActive] = useState(false);
   const [isFinished, setIsFinished] = useState(false);
 
+  // User inputs
+  const [hapticsOn, setHapticsOn] = useState(true);
+  const [restSecsInput, setRestSecsInput] = useState(String(15));
+
+  // Keep device awake during this screen
+  useKeepAwake();
+
   // Reset session if workout changes
   useEffect(() => {
+    const next = workout?.steps ?? [];
+    setSteps(next);
     setStepIndex(0);
-    setSecondsLeft(circuit[0]?.duration ?? 0);
+    setSecondsLeft(next[0]?.duration ?? 0);
     setIsActive(false);
     setIsFinished(false);
-  }, [workout, circuit]);
+  }, [workout]);
 
-  // Timer
+  // Timer (driven by local steps state)
   useEffect(() => {
-    if (!circuit.length) return;
+    if (!steps.length) return;
     let interval: ReturnType<typeof setInterval> | undefined;
 
     if (isActive && secondsLeft > 0) {
       interval = setInterval(() => setSecondsLeft((p) => p - 1), 1000);
     } else if (isActive && secondsLeft === 0) {
-      if (stepIndex < circuit.length - 1) {
+      if (stepIndex < steps.length - 1) {
         const next = stepIndex + 1;
         setStepIndex(next);
-        setSecondsLeft(circuit[next].duration);
+        setSecondsLeft(steps[next].duration);
       } else {
         setIsActive(false);
         setIsFinished(true);
       }
     }
     return () => interval && clearInterval(interval);
-  }, [isActive, secondsLeft, stepIndex, circuit]);
+  }, [isActive, secondsLeft, stepIndex, steps]);
+
+  // Haptics feedback
+  useEffect(() => {
+    if (!isActive) return;
+    if (hapticsOn) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+  }, [stepIndex, isActive, hapticsOn]);
+
+  useEffect(() => {
+    if (isFinished && hapticsOn) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    }
+  }, [isFinished, hapticsOn]);
 
   const resetCircuit = () => {
     setStepIndex(0);
-    setSecondsLeft(circuit[0]?.duration ?? 0);
+    setSecondsLeft(steps[0]?.duration ?? 0);
     setIsActive(false);
     setIsFinished(false);
   };
@@ -84,19 +111,19 @@ export default function WorkoutPage() {
 
   // Derived progress values
   const percentThroughCurrent = useMemo(() => {
-    const dur = circuit[stepIndex]?.duration ?? 0;
+    const dur = steps[stepIndex]?.duration ?? 0;
     if (!dur) return 0;
     return (1 - secondsLeft / dur) * 100;
-  }, [stepIndex, secondsLeft, circuit]);
+  }, [stepIndex, secondsLeft, steps]);
 
   const totalRemaining = useMemo(() => {
-    if (!circuit.length) return 0;
+    if (!steps.length) return 0;
     const currentRemaining = secondsLeft;
-    const rest = circuit
+    const rest = steps
       .slice(stepIndex + 1)
       .reduce((sum, s) => sum + s.duration, 0);
     return currentRemaining + rest;
-  }, [stepIndex, secondsLeft, circuit]);
+  }, [stepIndex, secondsLeft, steps]);
 
   // Auto-scroll list
   const listRef = useRef<FlatList<Step> | null>(null);
@@ -122,7 +149,7 @@ export default function WorkoutPage() {
   const renderItem = ({ item, index }: ListRenderItemInfo<Step>) => {
     const isCurrent = index === stepIndex && !isFinished;
     const isDone =
-      index < stepIndex || (isFinished && index === circuit.length - 1);
+      index < stepIndex || (isFinished && index === steps.length - 1);
     const isUpcoming = index > stepIndex && !isFinished;
 
     const rowPct = isCurrent ? percentThroughCurrent : isDone ? 100 : 0;
@@ -159,6 +186,21 @@ export default function WorkoutPage() {
     );
   };
 
+  // Apply custom rest seconds to all "Rest" steps
+  const applyCustomRest = () => {
+    const val = Math.max(0, Number.parseInt(restSecsInput || "0", 10) || 0);
+    const next = steps.map((s) =>
+      s.label.toLowerCase() === "rest" ? { ...s, duration: val } : s
+    );
+    setSteps(next);
+
+    // If currently on a Rest step, update its remaining time immediately
+    const cur = next[stepIndex];
+    if (cur && cur.label.toLowerCase() === "rest") {
+      setSecondsLeft(cur.duration);
+    }
+  };
+
   return (
     <>
       <Stack.Screen options={{ headerShown: false }} />
@@ -166,22 +208,63 @@ export default function WorkoutPage() {
         title={workout?.name ?? "Circuit Session"}
         onBack={confirmExit}
       />
+
       <FlatList
         ListHeaderComponent={
           <View style={styles.topCard}>
+            {/* Current step / timer */}
             <Text style={styles.stepLabel}>
-              {isFinished ? "Done!" : circuit[stepIndex]?.label ?? ""}
+              {isFinished ? "Done!" : steps[stepIndex]?.label ?? ""}
             </Text>
             <Text style={styles.timer}>
               {isFinished ? "🎉" : `${secondsLeft}s`}
             </Text>
+
+            {/* User input controls */}
+            <View style={{ alignSelf: "stretch", gap: 12, marginBottom: 16 }}>
+              {/* Haptics toggle */}
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                }}
+              >
+                <Text style={{ fontWeight: "700" }}>Haptics</Text>
+                <Switch value={hapticsOn} onValueChange={setHapticsOn} />
+              </View>
+
+              {/* Rest duration input */}
+              <View>
+                <Text style={{ fontWeight: "700", marginBottom: 6 }}>
+                  Rest duration (seconds)
+                </Text>
+                <TextInput
+                  keyboardType="number-pad"
+                  value={restSecsInput}
+                  onChangeText={setRestSecsInput}
+                  placeholder="e.g. 15"
+                  style={styles.input}
+                />
+                <View style={{ height: 8 }} />
+                <Button
+                  title="Apply to all Rest steps"
+                  onPress={applyCustomRest}
+                />
+              </View>
+            </View>
+
+            {/* Controls */}
             <View style={styles.controls}>
               <View style={styles.controlBtn}>
                 <Button
                   title={isActive ? "Pause" : isFinished ? "Restart" : "Start"}
                   onPress={() => {
                     if (isFinished) {
-                      resetCircuit();
+                      // restart from the first step
+                      setStepIndex(0);
+                      setSecondsLeft(steps[0]?.duration ?? 0);
+                      setIsFinished(false);
                       setIsActive(true);
                     } else {
                       setIsActive((v) => !v);
@@ -193,18 +276,30 @@ export default function WorkoutPage() {
                 <Button title="Reset" onPress={resetCircuit} />
               </View>
             </View>
+
             <Text style={styles.progressText}>
-              Step {stepIndex + 1} of {circuit.length} • {totalRemaining}s left
+              Step {steps.length ? stepIndex + 1 : 0} of {steps.length} •{" "}
+              {totalRemaining}s left
             </Text>
           </View>
         }
         contentContainerStyle={styles.page}
         ref={listRef}
-        data={circuit}
+        data={steps}
         keyExtractor={(item, i) => `${i}-${item.label}`}
         renderItem={renderItem}
         getItemLayout={getItemLayout}
         ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
+        ListEmptyComponent={
+          <View style={[styles.topCard, { alignItems: "center" }]}>
+            <Text style={{ fontWeight: "700", color: "#444", marginBottom: 8 }}>
+              No steps found
+            </Text>
+            <Text style={{ color: "#666" }}>
+              This workout has no steps. Please pick a different workout.
+            </Text>
+          </View>
+        }
       />
     </>
   );
@@ -232,6 +327,15 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   timer: { fontSize: 56, fontWeight: "800", color: "#333", marginVertical: 8 },
+  input: {
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontWeight: "600",
+    backgroundColor: "#fafafa",
+  },
   controls: { flexDirection: "row", gap: 12, marginTop: 12 },
   controlBtn: { minWidth: 120 },
   progressText: { marginTop: 12, color: "#555", fontWeight: "600" },

@@ -1,50 +1,79 @@
-# Welcome to your Expo app 👋
+# ThryveIQ-Circuit
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+ThryveIQ-Circuit is a simple circuit training app built with **Expo Router**.  
+It allows users to browse workouts, start a timer-driven circuit, and customize rest times with live feedback.
 
-## Get started
+---
 
-1. Install dependencies
+## Features
 
-   ```bash
-   npm install
-   ```
+- **Multi-screen navigation** with Expo Router:
 
-2. Start the app
+  - **Home Screen** (dashboard overview)
+  - **Workouts Screen** (list of available workouts)
+  - **Workout Detail Screen** (timer + step list)
 
-   ```bash
-   npx expo start
-   ```
+- **Data passing between screens**
 
-In the output, you'll find options to open the app in a
+  - Tapping a workout passes its `id` into the Workout Detail screen.
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+- **Timer-driven circuits**
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+  - Steps count down with `useState` and `useEffect`.
+  - Auto-advances to the next step until finished.
 
-## Get a fresh project
+- **User input**
 
-When you're ready, run:
+  - **TextInput**: Adjust the duration for all Rest steps.
+  - **Switch**: Toggle haptics on/off.
 
-```bash
-npm run reset-project
-```
+- **Feedback**
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+  - **Haptics** on each step change and completion.
+  - **Alert** when leaving a workout.
+  - **Progress bars** that show time remaining.
+  - Celebration 🎉 when finished.
 
-## Learn more
+- **Extra Expo packages**
+  - [`expo-haptics`](https://docs.expo.dev/versions/latest/sdk/haptics/) → Vibrations for feedback.
+  - [`expo-keep-awake`](https://docs.expo.dev/versions/latest/sdk/keep-awake/) → Prevents screen from sleeping during a workout.
 
-To learn more about developing your project with Expo, look at the following resources:
+---
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+## Tech Used
 
-## Join the community
+- **Expo + Expo Router**
+- **React Native Components**: View, Text, Button, FlatList, TextInput, Switch
+- **React Hooks**: `useState`, `useEffect`, `useMemo`, `useCallback`, `useRef`
+- **TypeScript** for type safety
 
-Join our community of developers creating universal apps.
+---
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+## Assignment Requirements Checklist
+
+- [x] **Two screens or more using Expo Router**
+
+  - Implemented with `(tabs)/index.tsx`, `(tabs)/workouts.tsx`, and `/workout-page.tsx`.
+
+- [x] **Pass data between screens**
+
+  - Workouts tab → passes `id` → WorkoutPage loads the correct workout.
+
+- [x] **Use `useState` and `useEffect`**
+
+  - Timer logic, reset, and haptics all rely on state and effects.
+
+- [x] **At least one component (`View`, `Text`, `Button`)**
+
+  - Uses multiple core components + extras (FlatList, TextInput, Switch).
+
+- [x] **Include one form of input from the user**
+
+  - TextInput for rest duration + Switch for haptics toggle.
+
+- [x] **Give some sort of feedback**
+
+  - Haptics on step changes + completion, Alerts, and visual progress bars.
+
+- [x] **Utilize at least two extra Expo packages**
+  - `expo-haptics` and `expo-keep-awake`.
